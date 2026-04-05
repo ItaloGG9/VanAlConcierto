@@ -5,16 +5,17 @@ from supabase import create_client, Client
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional # <--- FALTA ESTA IMPORTACIÓN
 
 # 1. Carga de variables
 load_dotenv()
 
-app = FastAPI(title="Código Visual API - Panel Admin")
+app = FastAPI(title="VanAlConcierto API")
 
-# 2. Configuración de CORS
+# 2. Configuración de CORS - Permitimos todo para evitar bloqueos
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://van-concierto-front.vercel.app"], # En producción cambia esto por tu URL de Vercel
+    allow_origins=["*"], 
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -27,7 +28,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 sdk = SDK(MP_ACCESS_TOKEN)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Modelo para recibir nuevos eventos desde el Front
+# Modelo para recibir nuevos eventos
 class NuevoEvento(BaseModel):
     titulo: str
     fecha: str
@@ -38,52 +39,57 @@ class NuevoEvento(BaseModel):
 
 @app.get("/")
 def read_root():
-    return {"status": "Servidor Funcionando", "project": "Código Visual"}
+    return {"status": "Servidor Funcionando", "project": "VanAlConcierto"}
 
-# --- APARTADO DE ADMINISTRADOR (GESTIÓN DE EVENTOS) ---
+# --- GESTIÓN DE EVENTOS ---
 
 @app.get("/eventos")
 async def obtener_eventos():
-    """Trae todos los eventos activos de Supabase"""
     try:
-        res = supabase.table("eventos").select("*").eq("activo", True).execute()
+        # Traemos los eventos que NO han sido eliminados (soft delete)
+        res = supabase.table("eventos").select("*").neq("activo", False).execute()
         return res.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/admin/nuevo-evento")
 async def crear_evento(evento: NuevoEvento):
-    """Agrega un nuevo concierto al mostrador"""
     try:
         res = supabase.table("eventos").insert({
             "titulo": evento.titulo,
             "fecha": evento.fecha,
             "lugar": evento.lugar,
             "precio": evento.precio,
-            "imagen_url": evento.imagen_url,
-            "descripcion": evento.descripcion
-            
+            "imagen_url": evento.imagen_url, # <--- AGREGADA COMA FALTA AQUÍ
+            "descripcion": evento.descripcion,
+            "activo": True
         }).execute()
         return {"message": "Evento creado con éxito", "data": res.data}
     except Exception as e:
+        print(f"Error insertando: {e}") # Para ver el error en los logs de Railway
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/admin/eliminar-evento/{evento_id}")
 async def eliminar_evento(evento_id: int):
-    """Desactiva un evento (Soft Delete)"""
     try:
-        # En lugar de borrarlo, lo ponemos como activo=false
+        # Marcamos como inactivo (Soft Delete)
         res = supabase.table("eventos").update({"activo": False}).eq("id", evento_id).execute()
-        return {"message": "Evento eliminado del mostrador"}
+        return {"message": "Evento eliminado"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- FLUJO MERCADO PAGO (ACTUALIZADO A TUS TABLAS SQL) ---
+# --- MERCADO PAGO ---
 
 @app.post("/create-preference")
-async def create_preference(evento_id: int, nombre: str, precio: int):
+async def create_preference(request: Request):
     try:
-        # 1. Insertar en la tabla 'reservas' (la que creamos con SQL)
+        # Recibimos los datos como JSON para evitar errores de tipo
+        body = await request.json()
+        evento_id = body.get("evento_id")
+        precio = body.get("precio")
+        nombre = body.get("nombre", "Cliente")
+
+        # 1. Insertar reserva inicial
         res = supabase.table("reservas").insert({
             "evento_id": evento_id,
             "nombre_cliente": nombre,
@@ -96,32 +102,28 @@ async def create_preference(evento_id: int, nombre: str, precio: int):
         preference_data = {
             "items": [
                 {
-                    "title": f"Reserva Código Visual - Evento {evento_id}",
+                    "title": f"Traslado VanAlConcierto - ID {evento_id}",
                     "quantity": 1,
                     "unit_price": float(precio),
                     "currency_id": "CLP"
                 }
             ],
-            "external_reference": str(reserva_id)
+            "external_reference": str(reserva_id),
+            "back_urls": {
+                "success": "https://van-concierto-front.vercel.app/",
+                "failure": "https://van-concierto-front.vercel.app/",
+                "pending": "https://van-concierto-front.vercel.app/"
+            },
+            "auto_return": "approved"
         }
         
         result = sdk.preference().create(preference_data)
         
         if "response" in result:
-            # Actualizamos la reserva con el preference_id de MP
             pref_id = result["response"]["id"]
             supabase.table("reservas").update({"preference_id": pref_id}).eq("id", reserva_id).execute()
-            
-            return {
-                "id": pref_id, # Enviamos el ID para el componente Wallet de React
-                "init_point": result["response"]["init_point"]
-            }
+            return {"id": pref_id}
         
     except Exception as e:
+        print(f"Error MP: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-# --- WEBHOOK ---
-@app.post("/webhook-mp")
-async def webhook_mp(request: Request):
-    # Aquí es donde MP te avisará cuando el pago pase de 'pendiente' a 'aprobado'
-    return {"status": "received"}

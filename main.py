@@ -60,7 +60,9 @@ async def crear_evento(evento: NuevoEvento):
             "fecha": evento.fecha,
             "lugar": evento.lugar,
             "precio": evento.precio,
-            "imagen_url": evento.imagen_url
+            "imagen_url": evento.imagen_url,
+            "descripcion": evento.descripcion
+            
         }).execute()
         return {"message": "Evento creado con éxito", "data": res.data}
     except Exception as e:

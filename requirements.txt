@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+mercadopago
+supabase
+python-dotenv
+qrcode

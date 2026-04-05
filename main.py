@@ -14,7 +14,7 @@ app = FastAPI(title="Código Visual API - Panel Admin")
 # 2. Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # En producción cambia esto por tu URL de Vercel
+    allow_origins=["https://van-concierto-front.vercel.app"], # En producción cambia esto por tu URL de Vercel
     allow_methods=["*"],
     allow_headers=["*"],
 )

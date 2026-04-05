@@ -30,7 +30,7 @@
 
     document.getElementById('checkout-btn').addEventListener('click', async () => {
         // 1. Llamamos a tu API de FastAPI
-        const response = await fetch('http://127.0.0.1:8000/create-preference?viaje_id=52e1b9eb-0e83-4a2a-9c14-096e8c3cb464&nombre=Servicio%20Test&precio=15000', {
+        const response = await fetch('https://vanalconcierto-production.up.railway.app/create-preference', {
             method: 'POST'
         });
 

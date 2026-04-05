@@ -34,6 +34,7 @@ class NuevoEvento(BaseModel):
     lugar: str
     precio: int
     imagen_url: str
+    descripcion: Optional[str] = None
 
 @app.get("/")
 def read_root():

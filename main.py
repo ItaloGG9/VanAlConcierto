@@ -14,7 +14,7 @@ app.add_middleware(
 # Registrar las rutas
 app.include_router(eventos.router)
 app.include_router(pagos.router)
-app.include_router(admin.router) # <--- Nueva ruta registrada
+app.include_router(admin.router) 
 
 @app.get("/")
 def home():
